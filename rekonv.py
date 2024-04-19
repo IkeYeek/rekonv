@@ -5,6 +5,7 @@ import click
 from pathlib import Path
 
 
+
 class Consts:
     INPUT_FORMATS = [
         "aiff", "aif", "au", "flac", "m4a", "mp3", "ogg", "wav", "webm",  # audio formats
