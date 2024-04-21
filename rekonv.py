@@ -56,7 +56,7 @@ class Utils:
     CREATE_INDEX_FLUSH_BUFFER = 1000
 
     INDEX_PATH = os.path.abspath("./.index.rk")
-    
+
     INDEX_POS_PATH = os.path.abspath("./.index-pos.rk")
 
     FILE_DONE = 0
@@ -89,11 +89,15 @@ def rekonv_file(target_path: str, output_path: str):
         print(t.stderr)
 
 
+def escape_separators(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("|", "\\|")
+
+
 def create_index(target: str, output_fd: str, output_format: str, skip_existing_files: bool, recursive: bool,
                  copy_all_files: bool):
     """
-    creates a binary index indexing all the files that will be either converted or copied during conversion stage.
-    creates a binary file with pickle that
+    creates a  index indexing all the files that will be either converted or copied during conversion stage.
+    creates a  file with pickle that
     """
 
     index: [IndexEntry] = []
@@ -120,8 +124,8 @@ def create_index(target: str, output_fd: str, output_format: str, skip_existing_
                     if skip_existing_files and os.path.exists(output_file):  # check if file exists
                         # if skip_existing_files is set to true
                         continue
-                    file = file.replace("\\", "\\\\").replace("|", "\\|")  # avoid separators in titles
-                    output_file = output_file.replace("\\", "\\\\").replace("|", "\\|")
+                    file = escape_separators(file)  # avoid separators in paths
+                    output_file = escape_separators(output_file)
                     if file_ext in Utils.INPUT_FORMATS:
                         index.append(f"{file}||{output_file}||1")
                         entries_til_last_flush += 1
@@ -223,7 +227,6 @@ def check_with_index() -> None:
                 errors.append(entry)
     if errors:
         for error in errors:
-
             rich.console.Console().print(f"[red] file {error[0]} was not found at path {error[1]}")
 
 
@@ -263,7 +266,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, sig_handler)
     if os.path.exists(Utils.INDEX_PATH) and os.path.exists(Utils.INDEX_POS_PATH):
         with open(Utils.INDEX_POS_PATH, "r") as index_pos_file:
-            file_done, conv_done = index_pos_file.readline().split(",")
+            file_done, conv_done = get_index_headers(index_pos_file)
             while True:
                 res = click.prompt("Do you want to continue from where you left off? [y/n]",
                                    type=click.Choice(["y", "n"]))
