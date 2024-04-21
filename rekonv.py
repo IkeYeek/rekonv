@@ -51,7 +51,7 @@ class Utils:
         "flv", "ogv", "mov", "mp4", "m4v", "mpg", "mpeg", "mp2", "mpe", "m2v",  # video formats
     ]
 
-    OUTPUT_FORMATS = ["aiff", "mp3", "m4a", "flac"]
+    OUTPUT_FORMATS = ["aiff", "mp3", "aac", "flac"]
 
     CREATE_INDEX_FLUSH_BUFFER = 1000
 
