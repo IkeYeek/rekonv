@@ -8,55 +8,8 @@ import rich
 from rich.progress import Progress
 from rich.live import Live
 import shutil
-
-
-@click.command()
-@click.option("--target", "-t", default="./", help="target directory or file, by default \"./\"")
-@click.option("--output-fd", "-o", default="./", help="output directory")
-@click.option("--output-format", "-f", default="aac", type=click.Choice(["aiff", "mp3", "aac", "flac"]),
-              help="output format")
-@click.option("--single-file", "-sf", is_flag=True, help="convert a single file, don't forget to set a target")
-@click.option("--skip-existing-files", "-skf", is_flag=True,
-              help="convert a single file, don't forget to set a target")
-@click.option("--recursive", "-r", is_flag=True, help="recursive")
-@click.option("--copy-all-files", "-cp", is_flag=True, help="copy all files even non musics")
-def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip_existing_files: bool, recursive: bool,
-        copy_all_files: bool):
-    """
-    A command-line interface function that converts audio files to a specified output format.
-
-    Parameters:
-        target (str): The target directory or file to convert. Default is "./".
-        output_fd (str): The output directory. Default is "./".
-        output_format (str): The output format. Default is "aac".
-        single_file (bool): Flag indicating whether to convert a single file. Default is False.
-        skip_existing_files (bool): Flag indicating whether to skip existing files. Default is False.
-        recursive (bool): Flag indicating whether to convert files recursively. Default is False.
-        copy_all_files (bool): Flag indicating whether to copy all files, even non-music files. Default is False.
-
-    Raises:
-        click.Abort: If the target is not set for single file conversion.
-
-    Returns:
-        None
-    """
-    if single_file and target == "./":  # if for a single file, target needs to be set
-        click.echo("target is mandatory for single file use")
-        raise click.Abort
-    if output_fd != "./":  # if output folder is not current folder, we format it properly and create it if necessary
-        output_fd = os.path.abspath(output_fd)
-        if not os.path.exists(output_fd):
-            os.makedirs(output_fd)
-    if single_file:
-        # for a single file, output_fd targets the output file (and for a folder it will target the root output folder)
-        output_fd = output_fd + "." + output_format
-    elif single_file:
-        target_path = os.path.abspath(target)  # absolute path to output target
-        target_name = Utils.get_file_name(target_path)  # name of the target obtained from absolute path
-        target_dir = os.path.dirname(target_path)  # directory of the target
-        output_fd = os.path.join(target_dir, target_name + "." + output_format)
-    rekonv = Rekonv(0, 0)
-    rekonv.rekonv(target, output_fd, output_format, single_file, skip_existing_files, recursive, copy_all_files)
+from rich import print
+from rich.prompt import Prompt
 
 
 class Utils:
@@ -139,15 +92,14 @@ class Utils:
         Returns:
             None
         """
-        print(output_path)
+        print(f"[magenta]{output_path}")
         Utils.create_file_if_not_exists(output_path)
         t = subprocess.run(["ffmpeg", "-y", "-i", target_path, output_path], capture_output=True)
         if t.returncode != 0 or not os.path.exists(output_path):
-            print(t.stderr)
+            print(f"[red]Failed to convert {target_path} to {output_path}, ffmpeg returned \n\t{t.stderr}")
 
 
 class Rekonv:
-    MAX_CONCURRENT_CONVERSIONS = 16
     INPUT_FORMATS = [
         "aiff", "aif", "au", "flac", "m4a", "mp3", "ogg", "wav", "webm", "aac",  # audio formats
         "flv", "ogv", "mov", "mp4", "m4v", "mpg", "mpeg", "mp2", "mpe", "m2v",  # video formats
@@ -161,11 +113,13 @@ class Rekonv:
 
     INDEX_POS_PATH = os.path.abspath("./.index-pos.rk")
 
+
     futures = []
 
     def __init__(self, f_done=0, c_done=0):
         self.FILE_DONE = f_done
         self.CONV_DONE = c_done
+        self.max_concurrent_conversions = os.cpu_count()
         self.futures = []
 
     def handle_future_termination(self, all_files_task, conversion_task, progress):
@@ -237,7 +191,7 @@ class Rekonv:
                     errors.append(entry)
         if errors:
             for error in errors:
-                rich.console.Console().print(f"[red] file {error[0]} was not found at path {error[1]}")
+                print(f"[red] file {error[0]} was not found at path {error[1]}")
 
     def rekonv_batch(self) -> None:
         """
@@ -284,7 +238,7 @@ class Rekonv:
         else:
             self.create_index(target, output_fd, output_format, skip_existing_files, recursive, copy_all_files)
             self.rekonv_batch()
-        rich.console.Console().print("[green]Done!")
+        print("[green]Done!")
 
     def create_index(self, target: str, output_fd: str, output_format: str, skip_existing_files: bool, recursive: bool,
                      copy_all_files: bool):
@@ -417,7 +371,7 @@ class Rekonv:
                             progress.update(all_files_task, advance=1)
                             shutil.copy(input_file, output_file)
                             self.FILE_DONE += 1
-                        while len(self.futures) > Rekonv.MAX_CONCURRENT_CONVERSIONS:
+                        while len(self.futures) > self.max_concurrent_conversions:
                             self.handle_future_termination(all_files_task, conversion_task, progress)
                             live.refresh()
                     while len(self.futures) > 0:
@@ -433,6 +387,58 @@ IndexEntry = (str, str, bool)  # (input_path, output_path, tryConversion)
 HeaderEntry = (int, int)
 
 
+@click.command()
+@click.option("--target", "-t", default="./", help="target directory or file, by default \"./\"")
+@click.option("--output-fd", "-o", default="./", help="output directory")
+@click.option("--output-format", "-f", default="aac", type=click.Choice(["aiff", "mp3", "aac", "flac"]),
+              help="output format")
+@click.option("--single-file", "-sf", is_flag=True, help="convert a single file, don't forget to set a target")
+@click.option("--skip-existing-files", "-skf", is_flag=True,
+              help="convert a single file, don't forget to set a target")
+@click.option("--recursive", "-r", is_flag=True, help="recursive")
+@click.option("--copy-all-files", "-cp", is_flag=True, help="copy all files even non musics")
+def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip_existing_files: bool, recursive: bool,
+        copy_all_files: bool):
+    """
+    A command-line interface function that converts audio files to a specified output format.
+
+    Parameters:
+        target (str): The target directory or file to convert. Default is "./".
+        output_fd (str): The output directory. Default is "./".
+        output_format (str): The output format. Default is "aac".
+        single_file (bool): Flag indicating whether to convert a single file. Default is False.
+        skip_existing_files (bool): Flag indicating whether to skip existing files. Default is False.
+        recursive (bool): Flag indicating whether to convert files recursively. Default is False.
+        copy_all_files (bool): Flag indicating whether to copy all files, even non-music files. Default is False.
+
+    Raises:
+        click.Abort: If the target is not set for single file conversion.
+
+    Returns:
+        None
+    """
+    if single_file and target == "./":  # if for a single file, target needs to be set
+        print("[red]target is mandatory for single file use")
+        raise click.Abort
+    if output_fd != "./":  # if output folder is not current folder, we format it properly and create it if necessary
+        output_fd = os.path.abspath(output_fd)
+        if not os.path.exists(output_fd):
+            if single_file:
+                os.makedirs(os.path.dirname(output_fd))
+            else:
+                os.makedirs(output_fd)
+    if single_file:
+        # for a single file, output_fd targets the output file (and for a folder it will target the root output folder)
+        output_fd = output_fd + "." + output_format
+    elif single_file:
+        target_path = os.path.abspath(target)  # absolute path to output target
+        target_name = Utils.get_file_name(target_path)  # name of the target obtained from absolute path
+        target_dir = os.path.dirname(target_path)  # directory of the target
+        output_fd = os.path.join(target_dir, target_name + "." + output_format)
+    rekonv = Rekonv()
+    rekonv.rekonv(target, output_fd, output_format, single_file, skip_existing_files, recursive, copy_all_files)
+
+
 if __name__ == "__main__":
     index_path_exists = os.path.exists(Rekonv.INDEX_PATH)
     index_pos_path_exists = os.path.exists(Rekonv.INDEX_POS_PATH)
@@ -443,8 +449,7 @@ if __name__ == "__main__":
             continue_prompt = True
 
             while continue_prompt:
-                response = click.prompt("Do you want to continue from where you left off? [y/n]",
-                                        type=click.Choice(["y", "n"]))
+                response = Prompt.ask("[yellow]Do you want to continue from where you left off?", choices=["y", "n"], show_choices=True)
                 if response == "y":
                     rekonv = Rekonv(file_done, conv_done)
                     rekonv.rekonv_batch()
@@ -453,7 +458,7 @@ if __name__ == "__main__":
                     cli()
                     continue_prompt = False
                 else:
-                    click.echo("Invalid input")
+                    print("[red]Invalid input")
     else:
         cli()
 
