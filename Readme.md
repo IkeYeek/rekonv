@@ -14,7 +14,7 @@ The rest of this readme was AI generated, enjoy the random emojis (sry I'm lazy)
 - 🎶 Supports a wide range of input formats (audio and video)
 - 🎵 Converts to popular output formats (AIFF, MP3, AAC, FLAC)
 - 🔄 Handles file name collisions by appending a suffix
-- 🚀 Fast conversion using FFmpeg
+- 🚀 Fast conversion using FFmpeg, and multi-threads by default
 - 💻 Creates an index of files to convert, allowing for resuming conversions from where you left off
 - 💡 Allows copying of non-audio/video files
 
@@ -50,6 +50,8 @@ python rekonv.py --output-format mp3 --output ./converted_files --recursive --ta
 - `--recursive` or `-r`: Enable recursive conversion.
 - `--skip-existing-files` or `-skf`: Skip existing files in the output directory.
 - `--copy-all-files` or `-cp`: Copy all files, including non-audio/video files.
+- `--single-process` or `-sp`: Runs the program on a single core.
+- `--max-concurent-processes` or `-mcp`: Max used core at the same time if not running single core
 ### Contributing
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
 
