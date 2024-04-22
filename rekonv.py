@@ -1,6 +1,7 @@
 import concurrent.futures
 import os
 import subprocess
+import sys
 from collections import deque
 
 import click
@@ -171,21 +172,25 @@ class Rekonv:
         if not os.path.exists(self.INDEX_PATH):
             raise Exception("Index file not found")
         errors = []
-
-        with open(self.INDEX_PATH, "r") as ifd:
-            num_files, num_to_convert = Rekonv.get_index_headers(ifd)
-            for i in range(num_files):
-                entry_raw = ifd.readline()
-                if not entry_raw:
-                    break
-                entry: IndexEntry = tuple(entry_raw.split("||"))
-                if len(entry) != 3:
-                    raise Exception("Invalid index entry")
-                if not os.path.exists(Utils.unescape_separators(entry[1])):
-                    errors.append(entry)
-        if errors:
-            for error in errors:
-                print(f"[red] file {error[0]} was not found at path {error[1]}")
+        try:
+            with open(self.INDEX_PATH, "r") as ifd:
+                num_files, num_to_convert = Rekonv.get_index_headers(ifd)
+                for i in range(num_files):
+                    entry_raw = ifd.readline()
+                    if not entry_raw:
+                        break
+                    entry: IndexEntry = tuple(entry_raw.split("||"))
+                    if len(entry) != 3:
+                        raise Exception("Invalid index entry")
+                    if not os.path.exists(Utils.unescape_separators(entry[1])):
+                        errors.append(entry)
+            if errors:
+                for error in errors:
+                    print(f"[red] file {error[0]} was not found at path {error[1]}")
+        except FileNotFoundError:
+            print("[red]Error while checking index file")
+        finally:
+            ifd.close()
 
     def rekonv_batch(self) -> None:
         """
@@ -262,53 +267,65 @@ class Rekonv:
         temp_file_path = "temp_index_file"
 
         # Step 1: Create a temporary file to store the actual data
-        with open(temp_file_path, "w") as temp_fd:
-            while queue:
-                current_dir, relative_path = queue.popleft()
-                for entry in os.scandir(current_dir):
-                    if entry.is_file():
-                        file = os.path.abspath(entry.path)
-                        file_name = Utils.get_file_name(file)
-                        file_ext = Utils.get_file_ext(file)
-                        # Construct the output file path based on the relative path from the target
-                        output_file_path = os.path.join(output_fd, relative_path, f"{file_name}.{output_format}")
-                        output_file = os.path.abspath(output_file_path)
-                        if skip_existing_files and os.path.exists(output_file):  # check if file exists
-                            # if skip_existing_files is set to true
-                            continue
-                        file = Utils.escape_separators(file)  # avoid separators in paths
-                        output_file = Utils.escape_separators(output_file)
-                        if file_ext in Rekonv.INPUT_FORMATS:
-                            index.append(f"{file}||{output_file}||1")
-                            entries_til_last_flush += 1
-                            num_files += 1
-                            num_to_convert += 1
-                        else:
-                            if copy_all_files:
-                                correct_output_name = f"{file_name}.{file_ext}" if file_ext else file_name
-                                new_file_path = os.path.join(output_fd, relative_path, correct_output_name)
-                                index.append(f"{file}||{new_file_path}||0")
+        try:
+            with open(temp_file_path, "w") as temp_fd:
+                while queue:
+                    current_dir, relative_path = queue.popleft()
+                    for entry in os.scandir(current_dir):
+                        if entry.is_file():
+                            file = os.path.abspath(entry.path)
+                            file_name = Utils.get_file_name(file)
+                            file_ext = Utils.get_file_ext(file)
+                            # Construct the output file path based on the relative path from the target
+                            output_file_path = os.path.join(output_fd, relative_path, f"{file_name}.{output_format}")
+                            output_file = os.path.abspath(output_file_path)
+                            if skip_existing_files and os.path.exists(output_file):  # check if file exists
+                                # if skip_existing_files is set to true
+                                continue
+                            file = Utils.escape_separators(file)  # avoid separators in paths
+                            output_file = Utils.escape_separators(output_file)
+                            if file_ext in Rekonv.INPUT_FORMATS:
+                                index.append(f"{file}||{output_file}||1")
                                 entries_til_last_flush += 1
                                 num_files += 1
-                        if entries_til_last_flush >= Rekonv.CREATE_INDEX_FLUSH_BUFFER:
-                            buffer = "\n".join(index)
-                            temp_fd.write(buffer)
-                            index.clear()
-                            entries_til_last_flush = 0
-                    elif entry.is_dir() and recursive:
-                        # Append the directory path and its relative path from target to the queue
-                        queue.append((entry.path, os.path.join(relative_path, entry.name)))
-            if index:  # index array is not empty
-                buffer = "\n".join(index)
-                temp_fd.write(buffer)
-
+                                num_to_convert += 1
+                            else:
+                                if copy_all_files:
+                                    correct_output_name = f"{file_name}.{file_ext}" if file_ext else file_name
+                                    new_file_path = os.path.join(output_fd, relative_path, correct_output_name)
+                                    index.append(f"{file}||{new_file_path}||0")
+                                    entries_til_last_flush += 1
+                                    num_files += 1
+                            if entries_til_last_flush >= Rekonv.CREATE_INDEX_FLUSH_BUFFER:
+                                buffer = "\n".join(index)
+                                temp_fd.write(buffer)
+                                index.clear()
+                                entries_til_last_flush = 0
+                        elif entry.is_dir() and recursive:
+                            # Append the directory path and its relative path from target to the queue
+                            queue.append((entry.path, os.path.join(relative_path, entry.name)))
+                if index:  # index array is not empty
+                    buffer = "\n".join(index)
+                    temp_fd.write(buffer)
+        except Exception as e:
+            print(e)
+        finally:
+            temp_fd.close()
         # Step 2: Write headers to the index file
-        with open(self.INDEX_PATH, "w") as index_fd:
-            index_fd.write(f"{num_files}, {num_to_convert}\n")
+        try:
+            with open(self.INDEX_PATH, "w") as index_fd:
+                index_fd.write(f"{num_files}, {num_to_convert}\n")
+        except Exception as e:
+            print(f"Error writing headers to index file: {e}")
+        finally:
+            index_fd.close()
 
         # Step 3: Append the temporary file to the index file
-        with open(temp_file_path, "r") as temp_fd, open(self.INDEX_PATH, "a") as index_fd:
-            index_fd.write(temp_fd.read())
+        try:
+            with open(temp_file_path, "r") as temp_fd, open(self.INDEX_PATH, "a") as index_fd:
+                index_fd.write(temp_fd.read())
+        except Exception as e:
+            print(f"Error creating index {e}")
 
         # Clean up the temporary file
         os.remove(temp_file_path)
@@ -377,6 +394,10 @@ class Rekonv:
                     while not self.single_process and len(self.futures) > 0:
                         self.handle_future_termination(all_files_task, conversion_task, progress)
                         live.refresh()
+        except KeyboardInterrupt:
+            print(f"Interrupted at {self.FILE_DONE} files and {self.CONV_DONE} conversions, saving position.")
+        except Exception as e:
+            print(f"Error: {e}")
         finally:
             index_fd.close()
             with open(Rekonv.INDEX_POS_PATH, "w") as ifd:
@@ -426,22 +447,27 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
     index_pos_path_exists = os.path.exists(Rekonv.INDEX_POS_PATH)
 
     if index_path_exists and index_pos_path_exists:
-        with open(Rekonv.INDEX_POS_PATH, "r") as index_pos_file:
-            file_done, conv_done = Rekonv.get_index_headers(index_pos_file)
-            continue_prompt = True
+        try:
+            with open(Rekonv.INDEX_POS_PATH, "r") as index_pos_file:
+                file_done, conv_done = Rekonv.get_index_headers(index_pos_file)
+                continue_prompt = True
 
-            while continue_prompt:
-                response = Prompt.ask("[yellow]Do you want to continue from where you left off?", choices=["y", "n"],
-                                      show_choices=True)
-                if response == "y":
-                    rekonv = Rekonv(single_process, max_concurrent_processes, file_done, conv_done)
-                    index_pos_file.close()
-                    rekonv.rekonv_batch()
-                    return
-                elif response == "n":
-                    continue_prompt = False
-                else:
-                    print("[red]Invalid input")
+                while continue_prompt:
+                    response = Prompt.ask("[yellow]Do you want to continue from where you left off?",
+                                          choices=["y", "n"], show_choices=True)
+                    if response == "y":
+                        rekonv = Rekonv(single_process, max_concurrent_processes, file_done, conv_done)
+                        index_pos_file.close()
+                        rekonv.rekonv_batch()
+                        return
+                    elif response == "n":
+                        continue_prompt = False
+                    else:
+                        print("[red]Invalid input")
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            index_pos_file.close()
 
     if single_file and target == "./":  # if for a single file, target needs to be set
         print("[red]target is mandatory for single file use")
@@ -467,4 +493,9 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
 
 if __name__ == "__main__":
     rich.console.Console().clear()
-    cli()
+    try:  # check if ffmpeg is installed
+        t = subprocess.run(["ffmpeg", "-version"], capture_output=False, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        cli()
+    except FileNotFoundError as e:
+        print("[red]ffmpeg not found. Please install ffmpeg and try again.")
+        sys.exit(1)
