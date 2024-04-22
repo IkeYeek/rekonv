@@ -95,8 +95,8 @@ class Utils:
         """
         print(f"[magenta]converting file {output_path}")
         Utils.create_file_if_not_exists(output_path)
-        t = subprocess.run(["ffmpeg", "-y", "-i", target_path, output_path], capture_output=True)
-        if t.returncode != 0 or not os.path.exists(output_path):
+        ffmpeg_subprocess = subprocess.run(["ffmpeg", "-y", "-i", target_path, output_path], capture_output=True)
+        if ffmpeg_subprocess.returncode != 0 or not os.path.exists(output_path):
             print(f"[red]Failed to convert {target_path} to {output_path}, ffmpeg returned \n\t{t.stderr}")
 
 
@@ -106,7 +106,7 @@ class Rekonv:
         "flv", "ogv", "mov", "mp4", "m4v", "mpg", "mpeg", "mp2", "mpe", "m2v",  # video formats
     ]
 
-    OUTPUT_FORMATS = ["aiff", "mp3", "aac", "flac"]
+    OUTPUT_FORMATS = ["aiff", "mp3", "aac", "flac", "wav"]
 
     CREATE_INDEX_FLUSH_BUFFER = 1000
 
@@ -307,16 +307,16 @@ class Rekonv:
                 if index:  # index array is not empty
                     buffer = "\n".join(index)
                     temp_fd.write(buffer)
-        except Exception as e:
-            print(e)
+        except Exception as ex:
+            print(ex)
         finally:
             temp_fd.close()
         # Step 2: Write headers to the index file
         try:
             with open(self.INDEX_PATH, "w") as index_fd:
                 index_fd.write(f"{num_files}, {num_to_convert}\n")
-        except Exception as e:
-            print(f"Error writing headers to index file: {e}")
+        except Exception as ex:
+            print(f"Error writing headers to index file: {ex}")
         finally:
             index_fd.close()
 
@@ -324,8 +324,8 @@ class Rekonv:
         try:
             with open(temp_file_path, "r") as temp_fd, open(self.INDEX_PATH, "a") as index_fd:
                 index_fd.write(temp_fd.read())
-        except Exception as e:
-            print(f"Error creating index {e}")
+        except Exception as ex:
+            print(f"Error creating index {ex}")
 
         # Clean up the temporary file
         os.remove(temp_file_path)
@@ -396,8 +396,8 @@ class Rekonv:
                         live.refresh()
         except KeyboardInterrupt:
             print(f"Interrupted at {self.FILE_DONE} files and {self.CONV_DONE} conversions, saving position.")
-        except Exception as e:
-            print(f"Error: {e}")
+        except Exception as ex:
+            print(f"Error: {ex}")
         finally:
             index_fd.close()
             with open(Rekonv.INDEX_POS_PATH, "w") as ifd:
@@ -411,7 +411,7 @@ HeaderEntry = (int, int)
 @click.command()
 @click.option("--target", "-t", default="./", help="target directory or file, by default \"./\"")
 @click.option("--output-fd", "-o", default="./", help="output directory")
-@click.option("--output-format", "-f", default="aac", type=click.Choice(["aiff", "mp3", "aac", "flac"]),
+@click.option("--output-format", "-f", default="aac", type=click.Choice(["aiff", "mp3", "aac", "flac", "wav"]),
               help="output format")
 @click.option("--single-file", "-sf", is_flag=True, help="convert a single file, don't forget to set a target")
 @click.option("--skip-existing-files", "-skf", is_flag=True,
@@ -464,8 +464,8 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
                         continue_prompt = False
                     else:
                         print("[red]Invalid input")
-        except Exception as e:
-            print(f"Error: {e}")
+        except Exception as ex:
+            print(f"Error: {ex}")
         finally:
             index_pos_file.close()
 
@@ -494,7 +494,8 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
 if __name__ == "__main__":
     rich.console.Console().clear()
     try:  # check if ffmpeg is installed
-        t = subprocess.run(["ffmpeg", "-version"], capture_output=False, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        t = subprocess.run(["ffmpeg", "-version"], capture_output=False, stderr=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL)
         cli()
     except FileNotFoundError as e:
         print("[red]ffmpeg not found. Please install ffmpeg and try again.")
