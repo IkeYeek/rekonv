@@ -92,7 +92,7 @@ class Utils:
         Returns:
             None
         """
-        print(f"[magenta]{output_path}")
+        print(f"[magenta]converting file {output_path}")
         Utils.create_file_if_not_exists(output_path)
         t = subprocess.run(["ffmpeg", "-y", "-i", target_path, output_path], capture_output=True)
         if t.returncode != 0 or not os.path.exists(output_path):
@@ -113,14 +113,13 @@ class Rekonv:
 
     INDEX_POS_PATH = os.path.abspath("./.index-pos.rk")
 
-
-    futures = []
-
-    def __init__(self, f_done=0, c_done=0):
+    def __init__(self, single_process, max_concurrent_conversions, f_done=0, c_done=0):
         self.FILE_DONE = f_done
         self.CONV_DONE = c_done
-        self.max_concurrent_conversions = os.cpu_count()
+        self.max_concurrent_conversions = 0 if single_process \
+            else max_concurrent_conversions if max_concurrent_conversions > 0 else os.cpu_count()
         self.futures = []
+        self.single_process = single_process
 
     def handle_future_termination(self, all_files_task, conversion_task, progress):
         """
@@ -354,7 +353,7 @@ class Rekonv:
                     for i in range(0, start_files, 1):
                         index_entry = index_fd.readline().split("||")
                         output_file = Utils.unescape_separators(index_entry[1])
-                        print(f"skipping file {output_file}")
+                        print(f"[yellow]skipping file {output_file}")
                     for i in range(start_files, num_files, 1):
                         index_entry = index_fd.readline().split("||")
                         input_file = Utils.unescape_separators(index_entry[0])
@@ -363,18 +362,25 @@ class Rekonv:
                         convert = int(index_entry[2]) == 1
 
                         if convert:
-                            # rekonv_file(input_file, output_file)
-                            self.futures.append(executor.submit(Utils.rekonv_file, input_file, output_file))
+                            if self.single_process:
+                                Utils.rekonv_file(input_file, output_file)
+                                self.CONV_DONE += 1
+                                self.FILE_DONE += 1
+                                progress.update(all_files_task, advance=1)
+                                progress.update(conversion_task, advance=1)
+                            else:
+                                self.futures.append(executor.submit(Utils.rekonv_file, input_file, output_file))
 
                         else:
+                            print(f"[magenta]copying file {output_file}")
                             Utils.create_file_if_not_exists(output_file)
                             progress.update(all_files_task, advance=1)
                             shutil.copy(input_file, output_file)
                             self.FILE_DONE += 1
-                        while len(self.futures) > self.max_concurrent_conversions:
+                        while not self.single_process and len(self.futures) > self.max_concurrent_conversions:
                             self.handle_future_termination(all_files_task, conversion_task, progress)
                             live.refresh()
-                    while len(self.futures) > 0:
+                    while not self.single_process and len(self.futures) > 0:
                         self.handle_future_termination(all_files_task, conversion_task, progress)
                         live.refresh()
         finally:
@@ -397,8 +403,10 @@ HeaderEntry = (int, int)
               help="convert a single file, don't forget to set a target")
 @click.option("--recursive", "-r", is_flag=True, help="recursive")
 @click.option("--copy-all-files", "-cp", is_flag=True, help="copy all files even non musics")
+@click.option("--single-process", "-sp", is_flag=True, help="multiprocess")
+@click.option("--max-concurrent-processes", "-mcp", default=0, help="max concurrent processes")
 def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip_existing_files: bool, recursive: bool,
-        copy_all_files: bool):
+        copy_all_files: bool, single_process: bool, max_concurrent_processes: int) -> None:
     """
     A command-line interface function that converts audio files to a specified output format.
 
@@ -417,6 +425,29 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
     Returns:
         None
     """
+
+    index_path_exists = os.path.exists(Rekonv.INDEX_PATH)
+    index_pos_path_exists = os.path.exists(Rekonv.INDEX_POS_PATH)
+
+    if index_path_exists and index_pos_path_exists:
+        with open(Rekonv.INDEX_POS_PATH, "r") as index_pos_file:
+            file_done, conv_done = Rekonv.get_index_headers(index_pos_file)
+            continue_prompt = True
+
+            while continue_prompt:
+                response = Prompt.ask("[yellow]Do you want to continue from where you left off?", choices=["y", "n"],
+                                      show_choices=True)
+                if response == "y":
+                    rekonv = Rekonv(single_process, max_concurrent_processes, file_done, conv_done)
+                    continue_prompt = False
+                    index_pos_file.close()
+                    rekonv.rekonv_batch()
+                    return
+                elif response == "n":
+                    continue_prompt = False
+                else:
+                    print("[red]Invalid input")
+
     if single_file and target == "./":  # if for a single file, target needs to be set
         print("[red]target is mandatory for single file use")
         raise click.Abort
@@ -435,32 +466,13 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
         target_name = Utils.get_file_name(target_path)  # name of the target obtained from absolute path
         target_dir = os.path.dirname(target_path)  # directory of the target
         output_fd = os.path.join(target_dir, target_name + "." + output_format)
-    rekonv = Rekonv()
+    rekonv = Rekonv(single_process, max_concurrent_processes, 0, 0)
     rekonv.rekonv(target, output_fd, output_format, single_file, skip_existing_files, recursive, copy_all_files)
 
 
 if __name__ == "__main__":
-    index_path_exists = os.path.exists(Rekonv.INDEX_PATH)
-    index_pos_path_exists = os.path.exists(Rekonv.INDEX_POS_PATH)
-
-    if index_path_exists and index_pos_path_exists:
-        with open(Rekonv.INDEX_POS_PATH, "r") as index_pos_file:
-            file_done, conv_done = Rekonv.get_index_headers(index_pos_file)
-            continue_prompt = True
-
-            while continue_prompt:
-                response = Prompt.ask("[yellow]Do you want to continue from where you left off?", choices=["y", "n"], show_choices=True)
-                if response == "y":
-                    rekonv = Rekonv(file_done, conv_done)
-                    rekonv.rekonv_batch()
-                    continue_prompt = False
-                elif response == "n":
-                    cli()
-                    continue_prompt = False
-                else:
-                    print("[red]Invalid input")
-    else:
-        cli()
+    rich.console.Console().clear()
+    cli()
 
 
 
