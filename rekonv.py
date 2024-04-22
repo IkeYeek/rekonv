@@ -396,12 +396,12 @@ class Rekonv:
                         live.refresh()
         except KeyboardInterrupt:
             print(f"Interrupted at {self.FILE_DONE} files and {self.CONV_DONE} conversions, saving position.")
-        except Exception as ex:
-            print(f"Error: {ex}")
-        finally:
             index_fd.close()
             with open(Rekonv.INDEX_POS_PATH, "w") as ifd:
                 ifd.write(f"{self.FILE_DONE},{self.CONV_DONE}")
+            raise KeyboardInterrupt()
+        except Exception as ex:
+            print(f"Error: {ex}")
 
 
 IndexEntry = (str, str, bool)  # (input_path, output_path, tryConversion)
@@ -499,4 +499,9 @@ if __name__ == "__main__":
         cli()
     except FileNotFoundError as e:
         print("[red]ffmpeg not found. Please install ffmpeg and try again.")
+        sys.exit(1)
+    except KeyboardInterrupt as e:
+        sys.exit(0)
+    except Exception as e:
+        print(e)
         sys.exit(1)
