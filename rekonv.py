@@ -128,7 +128,6 @@ class Rekonv:
         Parameters:
             all_files_task (int): The task ID for the "All files" progress bar.
             conversion_task (int): The task ID for the "Files to convert" progress bar.
-            futures (list): A list of concurrent.futures.Future objects representing the tasks.
             progress (rich.progress.Progress): The progress bar object.
 
         Returns:
@@ -146,18 +145,17 @@ class Rekonv:
         """
         Deletes the index file and index position file if they exist.
 
-        This function checks if the index file and index position file exist using the `os.path.exists()` function. If the index file exists, it is deleted using the `os.remove()` function. Similarly, if the index position file exists, it is deleted.
-
-        Parameters:
-            None
+        This function checks if the index file and index position file exist using the `os.path.exists()` function.
+        If the index file exists, it is deleted using the `os.remove()` function.
+        Similarly, if the index position file exists, it is deleted.
 
         Returns:
             None
         """
-        if os.path.exists(Rekonv.INDEX_PATH):
-            os.remove(Rekonv.INDEX_PATH)
-        if os.path.exists(Rekonv.INDEX_POS_PATH):
-            os.remove(Rekonv.INDEX_POS_PATH)
+        if os.path.exists(self.INDEX_PATH):
+            os.remove(self.INDEX_PATH)
+        if os.path.exists(self.INDEX_POS_PATH):
+            os.remove(self.INDEX_POS_PATH)
 
     def check_with_index(self) -> None:
         """
@@ -167,17 +165,14 @@ class Rekonv:
         It then reads the index file line by line and checks if each entry is valid.
         Finally, if there are any errors, they are reported to the console.
 
-        Parameters:
-            None
-
         Returns:
             None
         """
-        if not os.path.exists(Rekonv.INDEX_PATH):
+        if not os.path.exists(self.INDEX_PATH):
             raise Exception("Index file not found")
         errors = []
 
-        with open(Rekonv.INDEX_PATH, "r") as ifd:
+        with open(self.INDEX_PATH, "r") as ifd:
             num_files, num_to_convert = Rekonv.get_index_headers(ifd)
             for i in range(num_files):
                 entry_raw = ifd.readline()
@@ -196,9 +191,6 @@ class Rekonv:
         """
         Executes a batch conversion of files by calling the `work_from_index` function,
         `check_with_index` function, and `delete_index` function in sequence.
-
-        Parameters:
-            None
 
         Returns:
             None
@@ -224,13 +216,14 @@ class Rekonv:
         Returns:
             None
 
-        This function converts audio files to a specified output format. If `single_file` is True, it converts a single file
-        specified by `target` to the output format specified by `output_format`. If `single_file` is False, it creates an
-        index of files to be converted from the given target directory and then executes a batch conversion of files. The
-        converted files are stored in the output directory specified by `output_fd`. If `skip_existing_files` is True, it
-        skips existing files in the output directory. If `recursive` is True, it recursively creates the index from subdirectories.
-        If `copy_all_files` is True, it copies all files, including non-music files, to the output directory. After the conversion
-        is done, it prints "Done!" to the console using the rich library.
+        This function converts audio files to a specified output format. If `single_file` is True,
+        it converts a single file specified by `target` to the output format specified by `output_format`.
+        If `single_file` is False, it creates an index of files to be converted from the given target directory and
+        then executes a batch conversion of files. The converted files are stored in the output directory specified by
+        `output_fd`. If `skip_existing_files` is True, it skips existing files in the output directory.
+        If `recursive` is True, it recursively creates the index from subdirectories.
+        If `copy_all_files` is True, it copies all files, including non-music files, to the output directory.
+        After the conversion is done, it prints "Done!" to the console.
         """
         if single_file:
             Utils.rekonv_file(target, output_fd)
@@ -242,8 +235,9 @@ class Rekonv:
     def create_index(self, target: str, output_fd: str, output_format: str, skip_existing_files: bool, recursive: bool,
                      copy_all_files: bool):
         """
-        Create an index of files to be converted from the given target directory. The index is stored in a temporary file
-        and then appended to the main index file. The main index file contains the number of files and the number of files
+        Create an index of files to be converted from the given target directory.
+        The index is stored in a temporary file and then appended to the main index file.
+        The main index file contains the number of files and the number of files
         to be converted.
 
         Parameters:
@@ -252,7 +246,8 @@ class Rekonv:
             output_format (str): The output format of the converted files.
             skip_existing_files (bool): Flag indicating whether to skip existing files in the output directory.
             recursive (bool): Flag indicating whether to recursively create the index from subdirectories.
-            copy_all_files (bool): Flag indicating whether to copy all files, including non-music files, to the output directory.
+            copy_all_files (bool): Flag indicating whether to copy all files, including non-music files,
+             to the output directory.
 
         Returns:
             None
@@ -308,11 +303,11 @@ class Rekonv:
                 temp_fd.write(buffer)
 
         # Step 2: Write headers to the index file
-        with open(Rekonv.INDEX_PATH, "w") as index_fd:
+        with open(self.INDEX_PATH, "w") as index_fd:
             index_fd.write(f"{num_files}, {num_to_convert}\n")
 
         # Step 3: Append the temporary file to the index file
-        with open(temp_file_path, "r") as temp_fd, open(Rekonv.INDEX_PATH, "a") as index_fd:
+        with open(temp_file_path, "r") as temp_fd, open(self.INDEX_PATH, "a") as index_fd:
             index_fd.write(temp_fd.read())
 
         # Clean up the temporary file
@@ -336,7 +331,6 @@ class Rekonv:
     def work_from_index(self):
         """
         A function that processes the index file, handles file conversions, and updates progress.
-        Can start from Utls.FILE_DONE/Utils.CONV_DONE.
         """
         try:
             with open(Rekonv.INDEX_PATH, "r") as index_fd:
@@ -346,7 +340,7 @@ class Rekonv:
 
                 progress = Progress(auto_refresh=False)
 
-                all_files_task = progress.add_task(f"[yellow]All files...", total=num_files, completed=start_files)
+                all_files_task = progress.add_task("[yellow]All files...", total=num_files, completed=start_files)
                 conversion_task = progress.add_task("[yellow]Files to convert...", total=num_to_convert,
                                                     completed=start_convert)
                 with Live(progress, auto_refresh=False) as live, concurrent.futures.ProcessPoolExecutor() as executor:
@@ -418,6 +412,8 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
         skip_existing_files (bool): Flag indicating whether to skip existing files. Default is False.
         recursive (bool): Flag indicating whether to convert files recursively. Default is False.
         copy_all_files (bool): Flag indicating whether to copy all files, even non-music files. Default is False.
+        single_process (bool): Flag indicating whether to run the conversion in a single process. Default is False.
+        max_concurrent_processes (int): Number of max concurrent processes. Default is 0.
 
     Raises:
         click.Abort: If the target is not set for single file conversion.
@@ -439,7 +435,6 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
                                       show_choices=True)
                 if response == "y":
                     rekonv = Rekonv(single_process, max_concurrent_processes, file_done, conv_done)
-                    continue_prompt = False
                     index_pos_file.close()
                     rekonv.rekonv_batch()
                     return
@@ -473,6 +468,3 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
 if __name__ == "__main__":
     rich.console.Console().clear()
     cli()
-
-
-
