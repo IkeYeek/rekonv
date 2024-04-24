@@ -16,68 +16,23 @@ from rich.prompt import Prompt
 class Utils:
     @staticmethod
     def escape_separators(s: str) -> str:
-        """
-        A function that escapes '\' and '|' in the input string.
-
-        Parameters:
-            s (str): The input string to escape separators from.
-
-        Returns:
-            str: The input string with '\\' and '|' escaped.
-        """
         return s.replace("\\", "\\\\").replace("|", "\\|")
 
     @staticmethod
     def unescape_separators(s: str) -> str:
-        """
-        A function that unescapes '\' and '|' in the input string.
-
-        Parameters:
-            s (str): The input string to unescape separators from.
-
-        Returns:
-            str: The input string with '\\' and '|' unescaped.
-        """
         return s.replace("\\\\", "\\").replace("\\|", "|")
 
     @staticmethod
     def get_file_name(path) -> str:
-        """
-        Returns the file name without the extension from the given path.
-
-        Parameters:
-            path (str): The path of the file.
-
-        Returns:
-            str: The file name without the extension.
-        """
         return os.path.splitext(os.path.basename(path))[0]
 
     @staticmethod
     def get_file_ext(path) -> str | None:
-        """
-        Returns the file extension from the given path.
-
-        Parameters:
-            path (str): The path of the file.
-
-        Returns:
-            str | None: The file extension or None if the extension is empty or has less than 2 characters.
-        """
         ext = os.path.splitext(os.path.basename(path))[1]
         return None if len(ext) < 2 else ext[1:]
 
     @staticmethod
     def create_file_if_not_exists(path: str):
-        """
-        Create a file if it does not already exist.
-
-        Parameters:
-            path (str): The path of the file to create.
-
-        Returns:
-            None
-        """
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
 
