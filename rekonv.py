@@ -82,7 +82,7 @@ class Utils:
             os.makedirs(os.path.dirname(path))
 
     @staticmethod
-    def rekonv_file(target_path: str, output_path: str):
+    def rekonv_file(target_path: str, output_path: str, idx=1, ttl=1):
         """
         Convert a single audio file from the given target path to the specified output path using ffmpeg.
 
@@ -93,7 +93,7 @@ class Utils:
         Returns:
             None
         """
-        print(f"[magenta]converting file {output_path}")
+        print(f"[magenta]converting file {output_path}, [{idx}/{ttl}]")
         Utils.create_file_if_not_exists(output_path)
         ffmpeg_subprocess = subprocess.run(["ffmpeg", "-y", "-i", target_path, output_path], capture_output=True)
         if ffmpeg_subprocess.returncode != 0 or not os.path.exists(output_path):
@@ -141,6 +141,7 @@ class Rekonv:
             progress.update(all_files_task, advance=1)
             progress.update(conversion_task, advance=1)
             self.futures.remove(task)
+
 
     def delete_index(self):
         """
@@ -297,7 +298,7 @@ class Rekonv:
                                     entries_til_last_flush += 1
                                     num_files += 1
                             if entries_til_last_flush >= Rekonv.CREATE_INDEX_FLUSH_BUFFER:
-                                buffer = "\n".join(index)
+                                buffer = "\n".join(index) + "\n"
                                 temp_fd.write(buffer)
                                 index.clear()
                                 entries_til_last_flush = 0
@@ -374,13 +375,13 @@ class Rekonv:
 
                         if convert:
                             if self.single_process:
-                                Utils.rekonv_file(input_file, output_file)
+                                Utils.rekonv_file(input_file, output_file, i, num_to_convert)
                                 self.CONV_DONE += 1
                                 self.FILE_DONE += 1
                                 progress.update(all_files_task, advance=1)
                                 progress.update(conversion_task, advance=1)
                             else:
-                                self.futures.append(executor.submit(Utils.rekonv_file, input_file, output_file))
+                                self.futures.append(executor.submit(Utils.rekonv_file, input_file, output_file, i, num_to_convert))
 
                         else:
                             print(f"[magenta]copying file {output_file}")
@@ -494,7 +495,7 @@ def cli(target: str, output_fd: str, output_format: str, single_file: bool, skip
 if __name__ == "__main__":
     rich.console.Console().clear()
     try:  # check if ffmpeg is installed
-        t = subprocess.run(["ffmpeg", "-version"], capture_output=False, stderr=subprocess.DEVNULL,
+        t = subprocess.run(["ffmpeg", "-version"], capture_output=False,
                            stdout=subprocess.DEVNULL)
         cli()
     except FileNotFoundError as e:
